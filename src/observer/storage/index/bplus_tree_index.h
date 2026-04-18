@@ -35,6 +35,7 @@ public:
 
   RC insert_entry(const char *record, const RID *rid) override;
   RC delete_entry(const char *record, const RID *rid) override;
+  void refresh_field_metas(const std::vector<const FieldMeta *> &field_metas) override;
 
   /**
    * 扫描指定范围的数据

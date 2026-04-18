@@ -103,6 +103,48 @@ RC HeapTableEngine::delete_record(const Record &record)
   return rc;
 }
 
+RC HeapTableEngine::update_record_with_trx(const Record &old_record, const Record &new_record, Trx *trx)
+{
+  (void)trx;
+
+  RC rc = delete_entry_of_indexes(old_record.data(), old_record.rid(), true /*error_on_not_exists*/);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to delete old index entries while updating record. table=%s, rid=%s, rc=%s",
+        table_meta_->name(), old_record.rid().to_string().c_str(), strrc(rc));
+    return rc;
+  }
+
+  rc = insert_entry_of_indexes(new_record.data(), new_record.rid());
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to insert new index entries while updating record. table=%s, rid=%s, rc=%s",
+        table_meta_->name(), new_record.rid().to_string().c_str(), strrc(rc));
+    RC rollback_rc = insert_entry_of_indexes(old_record.data(), old_record.rid());
+    if (rollback_rc != RC::SUCCESS) {
+      LOG_PANIC("failed to rollback old index entries when updating record. table=%s, rid=%s, rc=%s",
+          table_meta_->name(), old_record.rid().to_string().c_str(), strrc(rollback_rc));
+    }
+    return rc;
+  }
+
+  rc = record_handler_->visit_record(old_record.rid(), [&](Record &record) {
+    memcpy(record.data(), new_record.data(), new_record.len());
+    return true;
+  });
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to update record body while updating record. table=%s, rid=%s, rc=%s",
+        table_meta_->name(), old_record.rid().to_string().c_str(), strrc(rc));
+    RC rollback_rc = delete_entry_of_indexes(new_record.data(), new_record.rid(), false /*error_on_not_exists*/);
+    if (rollback_rc == RC::SUCCESS) {
+      rollback_rc = insert_entry_of_indexes(old_record.data(), old_record.rid());
+    }
+    if (rollback_rc != RC::SUCCESS) {
+      LOG_PANIC("failed to rollback index entries when record update failed. table=%s, rid=%s, rc=%s",
+          table_meta_->name(), old_record.rid().to_string().c_str(), strrc(rollback_rc));
+    }
+  }
+  return rc;
+}
+
 RC HeapTableEngine::get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode)
 {
   scanner = new HeapRecordScanner(table_, *data_buffer_pool_, trx, db_->log_handler(), mode, nullptr);

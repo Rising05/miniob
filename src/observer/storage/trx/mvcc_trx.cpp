@@ -172,6 +172,34 @@ RC MvccTrx::delete_record(Table *table, Record &record)
   return RC::SUCCESS;
 }
 
+RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
+{
+  RC visit_result = RC::SUCCESS;
+  RC rc = table->visit_record(old_record.rid(), [this, table, &visit_result, &old_record](Record &inplace_record) -> bool {
+    visit_result = this->visit_record(table, inplace_record, ReadWriteMode::READ_WRITE);
+    if (OB_FAIL(visit_result)) {
+      return false;
+    }
+
+    // Use the latest in-place image to avoid stale trx fields.
+    old_record = inplace_record;
+    return true;
+  });
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to visit record while updating. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (OB_FAIL(visit_result)) {
+    return visit_result;
+  }
+
+  rc = table->update_record_with_trx(old_record, new_record, this);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to update record in table. rc=%s", strrc(rc));
+  }
+  return rc;
+}
+
 RC MvccTrx::visit_record(Table *table, Record &record, ReadWriteMode mode)
 {
   Field begin_field;

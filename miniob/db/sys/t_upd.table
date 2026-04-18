@@ -11,7 +11,7 @@
 		},
 		{
 			"FIELD_id" : 1,
-			"len" : 20,
+			"len" : 4,
 			"name" : "name",
 			"offset" : 4,
 			"type" : "chars",
@@ -20,17 +20,9 @@
 		{
 			"FIELD_id" : 2,
 			"len" : 4,
-			"name" : "age",
-			"offset" : 24,
+			"name" : "score",
+			"offset" : 8,
 			"type" : "ints",
-			"visible" : true
-		},
-		{
-			"FIELD_id" : 3,
-			"len" : 4096,
-			"name" : "content",
-			"offset" : 28,
-			"type" : "text",
 			"visible" : true
 		}
 	],
@@ -39,15 +31,14 @@
 		{
 			"field_names" : 
 			[
-				"name",
-				"age"
+				"id"
 			],
-			"name" : "idx_all"
+			"name" : "i_id"
 		}
 	],
 	"primary_keys" : null,
 	"storage_engine" : 0,
 	"storage_format" : 1,
 	"table_id" : 0,
-	"table_name" : "test_all"
+	"table_name" : "t_upd"
 }

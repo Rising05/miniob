@@ -122,6 +122,12 @@ RC BplusTreeIndex::delete_entry(const char *record, const RID *rid)
   return index_handler_.delete_entry(composite_key, rid);
 }
 
+void BplusTreeIndex::refresh_field_metas(const std::vector<const FieldMeta *> &field_metas)
+{
+  Index::refresh_field_metas(field_metas);
+  field_metas_ = field_metas;
+}
+
 IndexScanner *BplusTreeIndex::create_scanner(
     const char *left_key, int left_len, bool left_inclusive, const char *right_key, int right_len, bool right_inclusive)
 {

@@ -60,5 +60,39 @@ create index idx_na on t2(name, age);
 insert into t2 values(1, 'alice', 20);
 ### 2026-04-18 13:09:33.735
 drop table if exists t1;
-### 2026-04-18 13:10:05.787
+### 2026-04-18 13:14:42.677
 -- 实验1: DROP TABLE
+### 2026-04-18 18:34:55.439
+create table Update_table_1(id int, t_name char, col1 int, col2 int);
+### 2026-04-18 18:34:55.485
+create index index_id on Update_table_1(id);
+### 2026-04-18 18:34:55.531
+insert into Update_table_1 values (1,'N1',1,1);
+### 2026-04-18 18:37:49.747
+create table t_u(id int, name char, c1 int);
+### 2026-04-18 18:45:37.446
+create table t_upd(id int, name char, score int);
+### 2026-04-18 18:45:37.495
+create index i_id on t_upd(id);
+### 2026-04-18 18:45:37.541
+insert into t_upd values(1,'a',10);
+### 2026-04-18 18:45:37.542
+insert into t_upd values(2,'b',20);
+### 2026-04-18 18:45:37.542
+update t_upd set score=99 where id=1;
+### 2026-04-18 18:45:37.544
+update t_upd set id=3 where name='b';
+### 2026-04-18 18:45:37.544
+select * from t_upd;
+### 2026-04-18 18:45:37.545
+update t_upd set score='x' where id=1;
+### 2026-04-18 18:47:51.869
+create table t_bad(id int, v int);
+### 2026-04-18 18:47:51.918
+create index i_id on t_bad(id);
+### 2026-04-18 18:47:51.966
+insert into t_bad values(1,10);
+### 2026-04-18 18:47:51.967
+update t_bad set v='x' where id=1;
+### 2026-04-18 18:49:07.666
+create table t_bad2(id int, v int);
