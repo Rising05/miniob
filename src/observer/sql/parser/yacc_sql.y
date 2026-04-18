@@ -165,6 +165,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <cstring>             relation
 %type <comp>                comp_op
 %type <rel_attr>            rel_attr
+%type <rel_attr_list>       rel_attr_list
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
 %type <value_list>          value_list
@@ -303,13 +304,18 @@ desc_table_stmt:
     ;
 
 create_index_stmt:    /*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE ID RBRACE
+    CREATE INDEX ID ON ID LBRACE rel_attr_list RBRACE
     {
       $$ = new ParsedSqlNode(SCF_CREATE_INDEX);
       CreateIndexSqlNode &create_index = $$->create_index;
       create_index.index_name = $3;
       create_index.relation_name = $5;
-      create_index.attribute_name = $7;
+      if ($7 != nullptr) {
+        for (auto &rel_attr : *$7) {
+          create_index.attribute_names.push_back(rel_attr.attribute_name);
+        }
+        delete $7;
+      }
     }
     ;
 
@@ -390,6 +396,23 @@ primary_key:
     | COMMA PRIMARY KEY LBRACE attr_list RBRACE
     {
       $$ = $5;
+    }
+    ;
+
+rel_attr_list:
+    rel_attr {
+      $$ = new vector<RelAttrSqlNode>();
+      $$->push_back(*$1);
+      delete $1;
+    }
+    | rel_attr COMMA rel_attr_list {
+      if ($3 != nullptr) {
+        $$ = $3;
+      } else {
+        $$ = new vector<RelAttrSqlNode>();
+      }
+      $$->insert($$->begin(), *$1);
+      delete $1;
     }
     ;
 

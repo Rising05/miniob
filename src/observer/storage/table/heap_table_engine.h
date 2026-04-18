@@ -10,6 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include "common/lang/vector.h"
 #include "storage/table/table_engine.h"
 #include "storage/index/index.h"
 #include "storage/record/record_manager.h"
@@ -37,7 +38,7 @@ public:
   }
   RC get_record(const RID &rid, Record &record) override;
 
-  RC create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name) override;
+  RC create_index(Trx *trx, const vector<const FieldMeta *> &field_metas, const char *index_name) override;
   RC get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode) override;
   RC get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode mode) override;
   RC visit_record(const RID &rid, function<bool(Record &)> visitor) override;

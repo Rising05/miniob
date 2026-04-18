@@ -44,6 +44,13 @@ public:
   {
     return RC::UNSUPPORTED;
   }
+  virtual RC create(Table *table, const char *file_name, const IndexMeta &index_meta, const vector<const FieldMeta *> &field_metas)
+  {
+    if (!field_metas.empty()) {
+      return create(table, file_name, index_meta, *field_metas[0]);
+    }
+    return RC::UNSUPPORTED;
+  }
   virtual RC open(Table *table, const char *file_name, const IndexMeta &index_meta, const FieldMeta &field_meta)
   {
     return RC::UNSUPPORTED;
@@ -52,6 +59,7 @@ public:
   virtual bool is_vector_index() { return false; }
 
   const IndexMeta &index_meta() const { return index_meta_; }
+  const vector<const FieldMeta *> &field_metas() const { return field_metas_; }
 
   /**
    * @brief 插入一条数据
@@ -92,8 +100,9 @@ protected:
   RC init(const IndexMeta &index_meta, const FieldMeta &field_meta);
 
 protected:
-  IndexMeta index_meta_;  ///< 索引的元数据
-  FieldMeta field_meta_;  ///< 当前实现仅考虑一个字段的索引
+  IndexMeta index_meta_;              ///< 索引的元数据
+  FieldMeta field_meta_;             ///< 第一个字段的元数据（兼容单列）
+  vector<const FieldMeta *> field_metas_;  ///< 多字段元数据（支持多列索引）
 };
 
 /**
