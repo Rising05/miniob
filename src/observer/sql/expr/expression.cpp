@@ -106,7 +106,13 @@ RC CastExpr::get_column(Chunk &chunk, Column &column)
   if (rc != RC::SUCCESS) {
     return rc;
   }
-  column.init(cast_type_, child_column.attr_len());
+  int attr_len = child_column.attr_len();
+  if (cast_type_ == AttrType::INTS || cast_type_ == AttrType::FLOATS || cast_type_ == AttrType::DATES) {
+    attr_len = sizeof(int);
+  } else if (cast_type_ == AttrType::BOOLEANS) {
+    attr_len = sizeof(bool);
+  }
+  column.init(cast_type_, attr_len);
   for (int i = 0; i < child_column.count(); ++i) {
     Value value = child_column.get_value(i);
     Value cast_value;
@@ -242,7 +248,7 @@ RC ComparisonExpr::eval(Chunk &chunk, vector<uint8_t> &select)
     rc = compare_column<int>(left_column, right_column, select);
   } else if (left_column.attr_type() == AttrType::FLOATS) {
     rc = compare_column<float>(left_column, right_column, select);
-  } else if (left_column.attr_type() == AttrType::CHARS) {
+  } else if (left_column.attr_type() == AttrType::CHARS || left_column.attr_type() == AttrType::DATES) {
     int rows = 0;
     if (left_column.column_type() == Column::Type::CONSTANT_COLUMN) {
       rows = right_column.count();

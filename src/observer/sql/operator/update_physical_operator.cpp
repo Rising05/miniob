@@ -68,7 +68,16 @@ RC UpdatePhysicalOperator::open(Trx *trx)
 
   child->close();
 
-  const char *value_ptr = value_.data();
+  Value real_value = value_;
+  if (value_.attr_type() != field_meta->type()) {
+    rc = Value::cast_to(value_, field_meta->type(), real_value);
+    if (OB_FAIL(rc)) {
+      LOG_WARN("failed to cast update value. field=%s, rc=%s", attribute_name_.c_str(), strrc(rc));
+      return rc;
+    }
+  }
+
+  const char *value_ptr = real_value.data();
   if (value_ptr == nullptr) {
     return RC::INTERNAL;
   }
@@ -85,56 +94,20 @@ RC UpdatePhysicalOperator::open(Trx *trx)
     const int offset = field_meta->offset();
     const int len    = field_meta->len();
     const AttrType field_type = field_meta->type();
-    auto safe_int_value = [&]() -> int {
-      if (value_.attr_type() != AttrType::CHARS) {
-        return value_.get_int();
-      }
-      try {
-        return std::stoi(std::string(value_ptr, value_.length()));
-      } catch (...) {
-        return 0;
-      }
-    };
-    auto safe_float_value = [&]() -> float {
-      if (value_.attr_type() != AttrType::CHARS) {
-        return value_.get_float();
-      }
-      try {
-        return std::stof(std::string(value_ptr, value_.length()));
-      } catch (...) {
-        return 0.0f;
-      }
-    };
-    auto safe_bool_value = [&]() -> bool {
-      if (value_.attr_type() != AttrType::CHARS) {
-        return value_.get_boolean();
-      }
-      const std::string str_value(value_ptr, value_.length());
-      if (str_value == "0" || str_value == "false" || str_value == "FALSE") {
-        return false;
-      }
-      return !str_value.empty();
-    };
 
     switch (field_type) {
-      case AttrType::INTS: {
-        int int_value = safe_int_value();
-        memcpy(new_record_data + offset, &int_value, sizeof(int));
-      } break;
-      case AttrType::FLOATS: {
-        float float_value = safe_float_value();
-        memcpy(new_record_data + offset, &float_value, sizeof(float));
-      } break;
-      case AttrType::BOOLEANS: {
-        bool bool_value = safe_bool_value();
-        memcpy(new_record_data + offset, &bool_value, sizeof(bool));
-      } break;
       case AttrType::CHARS: {
         memset(new_record_data + offset, 0, len);
-        const int copy_len = std::min(len, value_.length());
+        const int copy_len = std::min(len, real_value.length());
         if (copy_len > 0) {
           memcpy(new_record_data + offset, value_ptr, copy_len);
         }
+      } break;
+      case AttrType::INTS:
+      case AttrType::FLOATS:
+      case AttrType::BOOLEANS:
+      case AttrType::DATES: {
+        memcpy(new_record_data + offset, value_ptr, len);
       } break;
       default: {
         LOG_WARN("unsupported update field type. field=%s, type=%d", attribute_name_.c_str(), static_cast<int>(field_type));

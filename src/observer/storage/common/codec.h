@@ -428,6 +428,11 @@ public:
           LOG_WARN("append failed");
         }
         break;
+      case AttrType::DATES:
+        if (OB_FAIL(OrderedCode::append(dst, (int64_t)val.get_int()))) {
+          LOG_WARN("append failed");
+        }
+        break;
       case AttrType::CHARS:
         if (OB_FAIL(OrderedCode::append(dst, val.get_string()))) {
           LOG_WARN("append failed");

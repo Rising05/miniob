@@ -111,7 +111,25 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
   // 但是选手们还是要实现。这个功能在预选赛中会出现
   if (type_left != type_right) {
-    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    if (left.is_attr && !right.is_attr) {
+      Value cast_value;
+      RC    rc = Value::cast_to(right.value, type_left, cast_value);
+      if (OB_FAIL(rc)) {
+        return rc;
+      }
+      right.value = cast_value;
+      type_right  = type_left;
+    } else if (!left.is_attr && right.is_attr) {
+      Value cast_value;
+      RC    rc = Value::cast_to(left.value, type_right, cast_value);
+      if (OB_FAIL(rc)) {
+        return rc;
+      }
+      left.value = cast_value;
+      type_left  = type_right;
+    } else {
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
   }
 
   return init(left, right, type_left, condition.comp);
