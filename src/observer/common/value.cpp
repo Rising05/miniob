@@ -113,7 +113,8 @@ void Value::reset()
 void Value::set_data(char *data, int length)
 {
   switch (attr_type_) {
-    case AttrType::CHARS: {
+    case AttrType::CHARS:
+    case AttrType::TEXTS: {
       set_string(data, length);
     } break;
     case AttrType::INTS: {

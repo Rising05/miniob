@@ -15,9 +15,16 @@ See the Mulan PSL v2 for more details. */
 
 int TextType::compare(const Value &left, const Value &right) const
 {
-  string left_str = left.get_string();
-  string right_str = right.get_string();
-  return left_str.compare(right_str);
+  if (left.data() == nullptr || right.data() == nullptr) {
+    return left.data() == right.data() ? 0 : (left.data() < right.data() ? -1 : 1);
+  }
+  int min_len = std::min(left.length(), right.length());
+  int cmp = memcmp(left.data(), right.data(), min_len);
+  if (cmp != 0) return cmp;
+  if (left.length() != right.length()) {
+    return left.length() < right.length() ? -1 : 1;
+  }
+  return 0;
 }
 
 RC TextType::set_value_from_str(Value &val, const string &data) const
@@ -30,8 +37,11 @@ RC TextType::cast_to(const Value &val, AttrType type, Value &result) const
 {
   switch (type) {
     case AttrType::CHARS: {
-      string str = val.get_string();
-      result.set_string(str.c_str(), str.length());
+      if (val.data() != nullptr && val.length() > 0) {
+        result.set_string(val.data(), val.length());
+      } else {
+        result.set_string("", 0);
+      }
       return RC::SUCCESS;
     }
     default:
@@ -52,6 +62,10 @@ int TextType::cast_cost(AttrType type)
 
 RC TextType::to_string(const Value &val, string &result) const
 {
-  result = val.get_string();
+  if (val.data() != nullptr && val.length() > 0) {
+    result.assign(val.data(), val.length());
+  } else {
+    result = "";
+  }
   return RC::SUCCESS;
 }

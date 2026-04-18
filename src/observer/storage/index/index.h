@@ -99,6 +99,11 @@ public:
 protected:
   RC init(const IndexMeta &index_meta, const FieldMeta &field_meta);
 
+public:
+  virtual void refresh_field_metas(const std::vector<const FieldMeta *> &field_metas) {
+    field_metas_ = field_metas;
+  }
+
 protected:
   IndexMeta index_meta_;              ///< 索引的元数据
   FieldMeta field_meta_;             ///< 第一个字段的元数据（兼容单列）

@@ -216,6 +216,16 @@ RC HeapTableEngine::create_index(Trx *trx, const vector<const FieldMeta *> &fiel
 
   table_meta_->swap(new_table_meta);
 
+  std::vector<const FieldMeta *> new_fields;
+  const vector<FieldMeta> *fields = table_meta_->field_metas();
+  for (const FieldMeta &f : *fields) {
+    new_fields.push_back(&f);
+  }
+
+  for (Index *idx : indexes_) {
+    idx->refresh_field_metas(new_fields);
+  }
+
   LOG_INFO("Successfully added a new index (%s) on the table (%s)", index_name, table_meta_->name());
   return rc;
 }
