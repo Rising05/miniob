@@ -165,6 +165,9 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
       }
 
       const Field &field = field_expr->field();
+      if (field.attr_type() == AttrType::DATES) {
+        continue;
+      }
       index              = table->find_index_by_field(field.field_name());
       if (nullptr != index) {
         break;
@@ -176,6 +179,7 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
     ASSERT(value_expr != nullptr, "got an index but value expr is null ?");
 
     const Value               &value           = value_expr->get_value();
+
     IndexScanPhysicalOperator *index_scan_oper = new IndexScanPhysicalOperator(table,
         index,
         table_get_oper.read_write_mode(),
