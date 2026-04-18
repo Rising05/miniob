@@ -88,6 +88,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         INT_T
         STRING_T
         FLOAT_T
+        TEXT_T
         VECTOR_T
         HELP
         EXIT
@@ -364,7 +365,7 @@ attr_def_list:
     ;
     
 attr_def:
-    ID type LBRACE number RBRACE 
+    ID type LBRACE number RBRACE
     {
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
@@ -376,7 +377,11 @@ attr_def:
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
       $$->name = $1;
-      $$->length = 4;
+      if ((AttrType)$2 == AttrType::TEXTS) {
+        $$->length = 4096;
+      } else {
+        $$->length = 4;
+      }
     }
     ;
 number:
@@ -386,6 +391,7 @@ type:
     INT_T      { $$ = static_cast<int>(AttrType::INTS); }
     | STRING_T { $$ = static_cast<int>(AttrType::CHARS); }
     | FLOAT_T  { $$ = static_cast<int>(AttrType::FLOATS); }
+    | TEXT_T   { $$ = static_cast<int>(AttrType::TEXTS); }
     | VECTOR_T { $$ = static_cast<int>(AttrType::VECTORS); }
     ;
 primary_key:

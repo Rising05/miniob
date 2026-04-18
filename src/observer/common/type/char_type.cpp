@@ -29,15 +29,21 @@ RC CharType::set_value_from_str(Value &val, const string &data) const
 RC CharType::cast_to(const Value &val, AttrType type, Value &result) const
 {
   switch (type) {
-    default: return RC::UNIMPLEMENTED;
+    case AttrType::TEXTS:
+      result.set_string(val.value_.pointer_value_, val.length_);
+      return RC::SUCCESS;
+    default:
+      return RC::UNIMPLEMENTED;
   }
-  return RC::SUCCESS;
 }
 
 int CharType::cast_cost(AttrType type)
 {
   if (type == AttrType::CHARS) {
     return 0;
+  }
+  if (type == AttrType::TEXTS) {
+    return 1;
   }
   return INT32_MAX;
 }
