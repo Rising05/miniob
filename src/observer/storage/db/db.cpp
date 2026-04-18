@@ -176,6 +176,33 @@ RC Db::create_table(const char *table_name, span<const AttrInfoSqlNode> attribut
   return RC::SUCCESS;
 }
 
+RC Db::drop_table(const char *table_name)
+{
+  RC rc = RC::SUCCESS;
+
+  auto iter = opened_tables_.find(table_name);
+  if (iter == opened_tables_.end()) {
+    LOG_WARN("Table not exist. db=%s, table_name=%s", name_.c_str(), table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  Table *table = iter->second;
+  opened_tables_.erase(iter);
+
+  string table_meta_path = table_meta_file(path_.c_str(), table_name);
+  string table_data_path = table_data_file(path_.c_str(), table_name);
+  string table_lob_path = table_lob_file(path_.c_str(), table_name);
+
+  delete table;
+
+  std::filesystem::remove(table_meta_path);
+  std::filesystem::remove(table_data_path);
+  std::filesystem::remove(table_lob_path);
+
+  LOG_INFO("Drop table success. table name=%s", table_name);
+  return rc;
+}
+
 Table *Db::find_table(const char *table_name) const
 {
   unordered_map<string, Table *>::const_iterator iter = opened_tables_.find(table_name);

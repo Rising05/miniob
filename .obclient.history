@@ -1,0 +1,4 @@
+### 2026-04-18 11:12:55.432
+CREATE TABLE test (id int, name varchar(20));
+### 2026-04-18 11:54:04.223
+CREATE TABLE testtbl (id int, name varchar(20));
