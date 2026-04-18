@@ -2,3 +2,63 @@
 CREATE TABLE test (id int, name varchar(20));
 ### 2026-04-18 11:54:04.223
 CREATE TABLE testtbl (id int, name varchar(20));
+### 2026-04-18 12:41:18.315
+CREATE TABLE test_drop (id int, name char(20));
+### 2026-04-18 12:43:43.117
+CREATE TABLE test_drop (id int, name char(20)); SHOW TABLES; quit
+### 2026-04-18 12:45:20.762
+CREATE TABLE test_multi (id int, name char(20), age int);
+### 2026-04-18 12:45:44.799
+CREATE INDEX idx_name_age ON test_multi(name, age);
+### 2026-04-18 12:46:00.040
+CREATE TABLE articles (id int, content text);
+### 2026-04-18 12:46:35.803
+INSERT INTO articles VALUES(1, 'Hello World');
+### 2026-04-18 12:47:15.604
+CREATE TABLE test_all (id int, name char(20), age int, content text);
+### 2026-04-18 12:47:18.614
+CREATE INDEX idx_all ON test_all(name, age);
+### 2026-04-18 12:47:21.638
+INSERT INTO test_all VALUES(1, 'Alice', 25, 'Hello World');
+### 2026-04-18 12:53:56.510
+insert into test_crash values(1, 'hello');
+### 2026-04-18 12:53:56.511
+select * from test_crash;
+### 2026-04-18 12:54:54.576
+create table test_crash(id int, name text);
+### 2026-04-18 12:55:58.190
+create table test_t(id int, name text);
+### 2026-04-18 12:56:34.087
+-- Test 1: DROP TABLE
+### 2026-04-18 12:56:34.222
+create table t1(id int);
+### 2026-04-18 12:56:34.280
+insert into t1 values(1);
+### 2026-04-18 12:56:34.330
+-- Test 2: Multi-column index
+### 2026-04-18 12:56:34.382
+create index idx_name_age on t2(name, age);
+### 2026-04-18 13:02:53.557
+create table t3(id int, content text);
+### 2026-04-18 13:06:04.409
+drop table if exists t2;
+### 2026-04-18 13:06:04.409
+drop table if exists t3;
+### 2026-04-18 13:06:04.409
+create table t1(id int, name char(20));
+### 2026-04-18 13:06:04.495
+insert into t1 values(1, 'test');
+### 2026-04-18 13:06:04.495
+drop table t1;
+### 2026-04-18 13:06:04.578
+-- 实验2: 多列索引  
+### 2026-04-18 13:06:04.578
+create table t2(id int, name char(20), age int);
+### 2026-04-18 13:06:04.660
+create index idx_na on t2(name, age);
+### 2026-04-18 13:06:04.740
+insert into t2 values(1, 'alice', 20);
+### 2026-04-18 13:09:33.735
+drop table if exists t1;
+### 2026-04-18 13:10:05.787
+-- 实验1: DROP TABLE

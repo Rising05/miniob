@@ -338,16 +338,23 @@ RC HeapTableEngine::open()
       return RC::INTERNAL;
     }
 
-    BplusTreeIndex *index      = new BplusTreeIndex();
+BplusTreeIndex *index      = new BplusTreeIndex();
     string          index_file = table_index_file(db_->path().c_str(), table_meta_->name(), index_meta->name());
 
     rc = index->open(table_, index_file.c_str(), *index_meta, *field_meta);
     if (rc != RC::SUCCESS) {
       delete index;
       LOG_ERROR("Failed to open index. table=%s, index=%s, file=%s, rc=%s",
-                table_meta_->name(), index_meta->name(), index_file.c_str(), strrc(rc));
+                table_meta_->name(), index_meta->name(), index_file.c_str(), rc);
       return rc;
     }
+
+    std::vector<const FieldMeta *> index_fields;
+    for (int i = 0; i < table_meta_->field_num(); i++) {
+      index_fields.push_back(table_meta_->field(i));
+    }
+    index->refresh_field_metas(index_fields);
+
     indexes_.push_back(index);
   }
   return rc;
