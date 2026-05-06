@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 #include "common/type/date_type.h"
 #include "common/value.h"
 
+#include <stdexcept>
+
 int CharType::compare(const Value &left, const Value &right) const
 {
   ASSERT(left.attr_type() == AttrType::CHARS && right.attr_type() == AttrType::CHARS, "invalid type");
@@ -30,6 +32,28 @@ RC CharType::set_value_from_str(Value &val, const string &data) const
 RC CharType::cast_to(const Value &val, AttrType type, Value &result) const
 {
   switch (type) {
+    case AttrType::INTS: {
+      try {
+        int int_value = std::stoi(val.get_string());
+        result.set_int(int_value);
+        return RC::SUCCESS;
+      } catch (const std::exception &e) {
+        LOG_WARN("failed to convert string to integer, using 0 as default. s=%s, ex=%s", val.get_string().c_str(), e.what());
+        result.set_int(0);
+        return RC::SUCCESS;
+      }
+    }
+    case AttrType::FLOATS: {
+      try {
+        float float_value = std::stof(val.get_string());
+        result.set_float(float_value);
+        return RC::SUCCESS;
+      } catch (const std::exception &e) {
+        LOG_WARN("failed to convert string to float, using 0.0 as default. s=%s, ex=%s", val.get_string().c_str(), e.what());
+        result.set_float(0.0f);
+        return RC::SUCCESS;
+      }
+    }
     case AttrType::DATES: {
       int date_value = 0;
       RC  rc         = DateType::parse_date_string(val.get_string(), date_value);
@@ -51,6 +75,12 @@ int CharType::cast_cost(AttrType type)
 {
   if (type == AttrType::CHARS) {
     return 0;
+  }
+  if (type == AttrType::INTS) {
+    return 2;
+  }
+  if (type == AttrType::FLOATS) {
+    return 2;
   }
   if (type == AttrType::DATES) {
     return 1;
