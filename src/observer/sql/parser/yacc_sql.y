@@ -101,6 +101,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         AND
         SET
         ON
+        INNER
+        JOIN
         LOAD
         DATA
         INFILE
@@ -134,7 +136,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   vector<Value> *                            value_list;
   vector<ConditionSqlNode> *                 condition_list;
   vector<RelAttrSqlNode> *                   rel_attr_list;
-  vector<string> *                           relation_list;
+  RelationSqlNode *                          relation_node;
   vector<string> *                           key_list;
   char *                                     cstring;
   int                                        number;
@@ -150,7 +152,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %destructor { delete $$; } <value_list>
 %destructor { delete $$; } <condition_list>
 // %destructor { delete $$; } <rel_attr_list>
-%destructor { delete $$; } <relation_list>
+%destructor { delete $$; } <relation_node>
 %destructor { delete $$; } <key_list>
 
 %token <number> NUMBER
@@ -176,7 +178,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <cstring>             storage_format
 %type <key_list>            primary_key
 %type <key_list>            attr_list
-%type <relation_list>       rel_list
+%type <relation_node>       table_references
+%type <relation_node>       joined_table
 %type <expression>          expression
 %type <expression>          aggregate_expression
 %type <expression_list>     expression_list
@@ -514,7 +517,7 @@ update_stmt:      /*  update 语句的语法解析树*/
     }
     ;
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT expression_list FROM rel_list where group_by
+    SELECT expression_list FROM table_references where group_by
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
       if ($2 != nullptr) {
@@ -523,12 +526,13 @@ select_stmt:        /*  select 语句的语法解析树*/
       }
 
       if ($4 != nullptr) {
-        $$->selection.relations.swap(*$4);
+        $$->selection.relations.swap($4->relations);
+        $$->selection.conditions.swap($4->conditions);
         delete $4;
       }
 
       if ($5 != nullptr) {
-        $$->selection.conditions.swap(*$5);
+        $$->selection.conditions.insert($$->selection.conditions.end(), $5->begin(), $5->end());
         delete $5;
       }
 
@@ -625,22 +629,39 @@ relation:
       $$ = $1;
     }
     ;
-rel_list:
-    relation {
-      $$ = new vector<string>();
-      $$->push_back($1);
+table_references:
+    joined_table {
+      $$ = $1;
     }
-    | relation COMMA rel_list {
-      if ($3 != nullptr) {
-        $$ = $3;
-      } else {
-        $$ = new vector<string>;
-      }
-
-      $$->insert($$->begin(), $1);
+    | table_references COMMA joined_table {
+      $$ = $1;
+      $$->relations.insert($$->relations.end(), $3->relations.begin(), $3->relations.end());
+      $$->conditions.insert($$->conditions.end(), $3->conditions.begin(), $3->conditions.end());
+      delete $3;
     }
     ;
-
+joined_table:
+    relation {
+      $$ = new RelationSqlNode();
+      $$->relations.push_back($1);
+    }
+    | joined_table INNER JOIN relation ON condition_list {
+      $$ = $1;
+      $$->relations.push_back($4);
+      if ($6 != nullptr) {
+        $$->conditions.insert($$->conditions.end(), $6->begin(), $6->end());
+        delete $6;
+      }
+    }
+    | joined_table JOIN relation ON condition_list {
+      $$ = $1;
+      $$->relations.push_back($3);
+      if ($5 != nullptr) {
+        $$->conditions.insert($$->conditions.end(), $5->begin(), $5->end());
+        delete $5;
+      }
+    }
+    ;
 where:
     /* empty */
     {

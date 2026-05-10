@@ -94,6 +94,12 @@ struct SelectSqlNode
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
 };
 
+struct RelationSqlNode
+{
+  vector<string>           relations;   ///< from 中出现的表，包含显式 join 和逗号连接的表
+  vector<ConditionSqlNode> conditions;  ///< 显式 join 的 on 条件，后续会与 where 条件合并
+};
+
 /**
  * @brief 算术表达式计算的语法树
  * @ingroup SQLParser
