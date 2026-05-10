@@ -53,8 +53,18 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
 
       auto &arithmetic_expr = static_cast<ArithmeticExpr &>(expr);
       rc = callback(arithmetic_expr.left());
-      if (OB_SUCC(rc)) {
+      if (OB_SUCC(rc) && arithmetic_expr.right()) {
         rc = callback(arithmetic_expr.right());
+      }
+    } break;
+
+    case ExprType::FUNCTION: {
+      auto &function_expr = static_cast<FunctionExpr &>(expr);
+      for (auto &child : function_expr.children()) {
+        rc = callback(child);
+        if (OB_FAIL(rc)) {
+          break;
+        }
       }
     } break;
 

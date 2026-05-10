@@ -312,6 +312,41 @@ TEST(ComparisonExpr, comparison_expr_test)
   }
 }
 
+TEST(FunctionExpr, scalar_function_try_get_value)
+{
+  {
+    vector<unique_ptr<Expression>> args;
+    args.emplace_back(make_unique<ValueExpr>(Value("OceanBase")));
+    FunctionExpr expr("length", std::move(args));
+    Value result;
+    ASSERT_EQ(RC::SUCCESS, expr.try_get_value(result));
+    ASSERT_EQ(AttrType::INTS, result.attr_type());
+    ASSERT_EQ(9, result.get_int());
+  }
+
+  {
+    vector<unique_ptr<Expression>> args;
+    args.emplace_back(make_unique<ValueExpr>(Value(3.6f)));
+    FunctionExpr expr("round", std::move(args));
+    Value result;
+    ASSERT_EQ(RC::SUCCESS, expr.try_get_value(result));
+    ASSERT_EQ(4, result.get_int());
+  }
+
+  {
+    Value date_value;
+    date_value.set_date(20240520);
+
+    vector<unique_ptr<Expression>> args;
+    args.emplace_back(make_unique<ValueExpr>(date_value));
+    args.emplace_back(make_unique<ValueExpr>(Value("%d,%M,%Y")));
+    FunctionExpr expr("date_format", std::move(args));
+    Value result;
+    ASSERT_EQ(RC::SUCCESS, expr.try_get_value(result));
+    ASSERT_EQ("20,May,2024", result.get_string());
+  }
+}
+
 TEST(AggregateExpr, aggregate_expr_test)
 {
   Value                  int_value(1);

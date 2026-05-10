@@ -86,6 +86,10 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
       return bind_arithmetic_expression(expr, bound_expressions);
     } break;
 
+    case ExprType::FUNCTION: {
+      return bind_function_expression(expr, bound_expressions);
+    } break;
+
     case ExprType::AGGREGATION: {
       ASSERT(false, "shouldn't be here");
     } break;
@@ -334,20 +338,79 @@ RC ExpressionBinder::bind_arithmetic_expression(
     left_expr.reset(left.release());
   }
 
-  child_bound_expressions.clear();
-  rc = bind_expression(right_expr, child_bound_expressions);
-  if (OB_FAIL(rc)) {
-    return rc;
+  if (right_expr) {
+    child_bound_expressions.clear();
+    rc = bind_expression(right_expr, child_bound_expressions);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid right children number of comparison expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    unique_ptr<Expression> &right = child_bound_expressions[0];
+    if (right.get() != right_expr.get()) {
+      right_expr.reset(right.release());
+    }
   }
 
-  if (child_bound_expressions.size() != 1) {
-    LOG_WARN("invalid right children number of comparison expression: %d", child_bound_expressions.size());
-    return RC::INVALID_ARGUMENT;
+  bound_expressions.emplace_back(std::move(expr));
+  return RC::SUCCESS;
+}
+
+RC ExpressionBinder::bind_function_expression(
+    unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  if (nullptr == expr) {
+    return RC::SUCCESS;
   }
 
-  unique_ptr<Expression> &right = child_bound_expressions[0];
-  if (right.get() != right_expr.get()) {
-    right_expr.reset(right.release());
+  auto function_expr = static_cast<FunctionExpr *>(expr.get());
+
+  vector<unique_ptr<Expression>> &children = function_expr->children();
+  for (unique_ptr<Expression> &child_expr : children) {
+    vector<unique_ptr<Expression>> child_bound_expressions;
+    RC rc = bind_expression(child_expr, child_bound_expressions);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid children number of function expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    unique_ptr<Expression> &child = child_bound_expressions[0];
+    if (child.get() != child_expr.get()) {
+      child_expr.reset(child.release());
+    }
+  }
+
+  switch (function_expr->function_type()) {
+    case FunctionExpr::Type::LENGTH: {
+      if (children.size() != 1 || children[0]->value_type() != AttrType::CHARS) {
+        LOG_WARN("invalid argument for length function");
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+    } break;
+
+    case FunctionExpr::Type::ROUND: {
+      if (children.size() != 1 || children[0]->value_type() != AttrType::FLOATS) {
+        LOG_WARN("invalid argument for round function");
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+    } break;
+
+    case FunctionExpr::Type::DATE_FORMAT: {
+      if (children.size() != 2 ||
+          (children[0]->value_type() != AttrType::DATES && children[0]->value_type() != AttrType::CHARS) ||
+          children[1]->value_type() != AttrType::CHARS) {
+        LOG_WARN("invalid argument for date_format function");
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+    } break;
   }
 
   bound_expressions.emplace_back(std::move(expr));

@@ -96,3 +96,5 @@ insert into t_bad values(1,10);
 update t_bad set v='x' where id=1;
 ### 2026-04-18 18:49:07.666
 create table t_bad2(id int, v int);
+### 2026-05-10 14:10:45.685
+SELECT 1+1;

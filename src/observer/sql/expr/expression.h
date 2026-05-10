@@ -46,6 +46,7 @@ enum class ExprType
   COMPARISON,   ///< 需要做比较的表达式
   CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,   ///< 算术运算
+  FUNCTION,     ///< 标量函数
   AGGREGATION,  ///< 聚合运算
 };
 
@@ -437,6 +438,48 @@ private:
   Type                   arithmetic_type_;
   unique_ptr<Expression> left_;
   unique_ptr<Expression> right_;
+};
+
+class FunctionExpr : public Expression
+{
+public:
+  enum class Type
+  {
+    LENGTH,
+    ROUND,
+    DATE_FORMAT,
+  };
+
+public:
+  FunctionExpr(const char *function_name, vector<unique_ptr<Expression>> children);
+  FunctionExpr(Type type, vector<unique_ptr<Expression>> children);
+  virtual ~FunctionExpr() = default;
+
+  unique_ptr<Expression> copy() const override;
+
+  ExprType type() const override { return ExprType::FUNCTION; }
+  AttrType value_type() const override;
+  int      value_length() const override;
+
+  RC get_value(const Tuple &tuple, Value &value) const override;
+  RC try_get_value(Value &value) const override;
+  RC get_column(Chunk &chunk, Column &column) override;
+
+  Type function_type() const { return function_type_; }
+  const char *function_name() const { return function_name_.c_str(); }
+
+  vector<unique_ptr<Expression>> &children() { return children_; }
+  const vector<unique_ptr<Expression>> &children() const { return children_; }
+
+  static RC type_from_string(const char *function_name, Type &type);
+
+private:
+  RC calc_value(const vector<Value> &arguments, Value &value) const;
+
+private:
+  Type                           function_type_;
+  string                         function_name_;
+  vector<unique_ptr<Expression>> children_;
 };
 
 class UnboundAggregateExpr : public Expression

@@ -53,16 +53,16 @@ public:
 
   CompOp comp() const { return comp_; }
 
-  void set_left(const FilterObj &obj) { left_ = obj; }
-  void set_right(const FilterObj &obj) { right_ = obj; }
+  void set_left(unique_ptr<Expression> expr) { left_ = std::move(expr); }
+  void set_right(unique_ptr<Expression> expr) { right_ = std::move(expr); }
 
-  const FilterObj &left() const { return left_; }
-  const FilterObj &right() const { return right_; }
+  const Expression *left() const { return left_.get(); }
+  const Expression *right() const { return right_.get(); }
 
 private:
-  CompOp    comp_ = NO_OP;
-  FilterObj left_;
-  FilterObj right_;
+  CompOp                 comp_ = NO_OP;
+  unique_ptr<Expression> left_;
+  unique_ptr<Expression> right_;
 };
 
 /**

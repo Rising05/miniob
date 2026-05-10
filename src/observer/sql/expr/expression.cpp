@@ -12,9 +12,13 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2022/07/05.
 //
 
+#include <cmath>
+#include <cstdio>
+
 #include "sql/expr/expression.h"
 #include "sql/expr/tuple.h"
 #include "sql/expr/arithmetic_operator.hpp"
+#include "common/type/date_type.h"
 
 using namespace std;
 
@@ -477,10 +481,12 @@ RC ArithmeticExpr::get_value(const Tuple &tuple, Value &value) const
     LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
     return rc;
   }
-  rc = right_->get_value(tuple, right_value);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
-    return rc;
+  if (right_) {
+    rc = right_->get_value(tuple, right_value);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
+      return rc;
+    }
   }
   return calc_value(left_value, right_value, value);
 }
@@ -500,10 +506,12 @@ RC ArithmeticExpr::get_column(Chunk &chunk, Column &column)
     LOG_WARN("failed to get column of left expression. rc=%s", strrc(rc));
     return rc;
   }
-  rc = right_->get_column(chunk, right_column);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get column of right expression. rc=%s", strrc(rc));
-    return rc;
+  if (right_) {
+    rc = right_->get_column(chunk, right_column);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get column of right expression. rc=%s", strrc(rc));
+      return rc;
+    }
   }
   return calc_column(left_column, right_column, column);
 }
@@ -513,9 +521,18 @@ RC ArithmeticExpr::calc_column(const Column &left_column, const Column &right_co
   RC rc = RC::SUCCESS;
 
   const AttrType target_type = value_type();
-  column.init(target_type, left_column.attr_len(), max(left_column.count(), right_column.count()));
+  column.init(target_type, left_column.attr_len(), right_ ? max(left_column.count(), right_column.count()) : left_column.count());
   bool left_const  = left_column.column_type() == Column::Type::CONSTANT_COLUMN;
   bool right_const = right_column.column_type() == Column::Type::CONSTANT_COLUMN;
+  if (!right_) {
+    column.set_column_type(left_const ? Column::Type::CONSTANT_COLUMN : Column::Type::NORMAL_COLUMN);
+    if (left_const) {
+      rc = execute_calc<true, true>(left_column, right_column, column, arithmetic_type_, target_type);
+    } else {
+      rc = execute_calc<false, true>(left_column, right_column, column, arithmetic_type_, target_type);
+    }
+    return rc;
+  }
   if (left_const && right_const) {
     column.set_column_type(Column::Type::CONSTANT_COLUMN);
     rc = execute_calc<true, true>(left_column, right_column, column, arithmetic_type_, target_type);
@@ -554,6 +571,256 @@ RC ArithmeticExpr::try_get_value(Value &value) const
   }
 
   return calc_value(left_value, right_value, value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+const char *month_name(int month)
+{
+  static const char *names[] = {
+      "", "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"};
+  if (month < 1 || month > 12) {
+    return "";
+  }
+  return names[month];
+}
+
+const char *day_suffix(int day)
+{
+  if (day % 100 >= 11 && day % 100 <= 13) {
+    return "th";
+  }
+  switch (day % 10) {
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
+  }
+}
+
+RC date_value_from_argument(const Value &argument, int &date_value)
+{
+  if (argument.attr_type() == AttrType::DATES) {
+    date_value = argument.get_int();
+    return RC::SUCCESS;
+  }
+  if (argument.attr_type() == AttrType::CHARS) {
+    return DateType::parse_date_string(argument.get_string(), date_value);
+  }
+  return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+}
+
+string format_date_value(int date_value, const string &format)
+{
+  const int year  = date_value / 10000;
+  const int month = (date_value / 100) % 100;
+  const int day   = date_value % 100;
+
+  string result;
+  for (size_t i = 0; i < format.size(); i++) {
+    if (format[i] != '%' || i + 1 >= format.size()) {
+      result.push_back(format[i]);
+      continue;
+    }
+
+    const char specifier = format[++i];
+    char buffer[32];
+    switch (specifier) {
+      case 'Y':
+        snprintf(buffer, sizeof(buffer), "%04d", year);
+        result += buffer;
+        break;
+      case 'y':
+        snprintf(buffer, sizeof(buffer), "%02d", year % 100);
+        result += buffer;
+        break;
+      case 'm':
+        snprintf(buffer, sizeof(buffer), "%02d", month);
+        result += buffer;
+        break;
+      case 'd':
+        snprintf(buffer, sizeof(buffer), "%02d", day);
+        result += buffer;
+        break;
+      case 'D':
+        snprintf(buffer, sizeof(buffer), "%d%s", day, day_suffix(day));
+        result += buffer;
+        break;
+      case 'M':
+        result += month_name(month);
+        break;
+      default:
+        result.push_back(specifier);
+        break;
+    }
+  }
+  return result;
+}
+
+}  // namespace
+
+FunctionExpr::FunctionExpr(const char *function_name, vector<unique_ptr<Expression>> children)
+    : function_name_(function_name), children_(std::move(children))
+{
+  RC rc = type_from_string(function_name, function_type_);
+  ASSERT(rc == RC::SUCCESS, "unknown function name");
+}
+
+FunctionExpr::FunctionExpr(Type type, vector<unique_ptr<Expression>> children)
+    : function_type_(type), children_(std::move(children))
+{
+  switch (type) {
+    case Type::LENGTH: function_name_ = "length"; break;
+    case Type::ROUND: function_name_ = "round"; break;
+    case Type::DATE_FORMAT: function_name_ = "date_format"; break;
+  }
+}
+
+unique_ptr<Expression> FunctionExpr::copy() const
+{
+  vector<unique_ptr<Expression>> children;
+  children.reserve(children_.size());
+  for (const unique_ptr<Expression> &child : children_) {
+    children.emplace_back(child->copy());
+  }
+  auto expr = make_unique<FunctionExpr>(function_type_, std::move(children));
+  expr->set_name(name());
+  return expr;
+}
+
+AttrType FunctionExpr::value_type() const
+{
+  switch (function_type_) {
+    case Type::LENGTH:
+    case Type::ROUND: return AttrType::INTS;
+    case Type::DATE_FORMAT: return AttrType::CHARS;
+  }
+  return AttrType::UNDEFINED;
+}
+
+int FunctionExpr::value_length() const
+{
+  switch (function_type_) {
+    case Type::LENGTH:
+    case Type::ROUND: return sizeof(int);
+    case Type::DATE_FORMAT: return 64;
+  }
+  return 0;
+}
+
+RC FunctionExpr::calc_value(const vector<Value> &arguments, Value &value) const
+{
+  switch (function_type_) {
+    case Type::LENGTH: {
+      if (arguments.size() != 1 || arguments[0].attr_type() != AttrType::CHARS) {
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+      value.set_int(arguments[0].length());
+      return RC::SUCCESS;
+    }
+
+    case Type::ROUND: {
+      if (arguments.size() != 1 || arguments[0].attr_type() != AttrType::FLOATS) {
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+      value.set_int(static_cast<int>(std::round(arguments[0].get_float())));
+      return RC::SUCCESS;
+    }
+
+    case Type::DATE_FORMAT: {
+      if (arguments.size() != 2 || arguments[1].attr_type() != AttrType::CHARS) {
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+      int date_value = 0;
+      RC rc = date_value_from_argument(arguments[0], date_value);
+      if (OB_FAIL(rc)) {
+        return rc;
+      }
+      const string formatted = format_date_value(date_value, arguments[1].get_string());
+      value.set_string(formatted.c_str(), static_cast<int>(formatted.size()));
+      return RC::SUCCESS;
+    }
+  }
+  return RC::UNIMPLEMENTED;
+}
+
+RC FunctionExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  vector<Value> arguments;
+  arguments.reserve(children_.size());
+  for (const unique_ptr<Expression> &child : children_) {
+    Value argument;
+    RC rc = child->get_value(tuple, argument);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+    arguments.emplace_back(std::move(argument));
+  }
+  return calc_value(arguments, value);
+}
+
+RC FunctionExpr::try_get_value(Value &value) const
+{
+  vector<Value> arguments;
+  arguments.reserve(children_.size());
+  for (const unique_ptr<Expression> &child : children_) {
+    Value argument;
+    RC rc = child->try_get_value(argument);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+    arguments.emplace_back(std::move(argument));
+  }
+  return calc_value(arguments, value);
+}
+
+RC FunctionExpr::get_column(Chunk &chunk, Column &column)
+{
+  if (pos_ != -1) {
+    column.reference(chunk.column(pos_));
+    return RC::SUCCESS;
+  }
+
+  const int rows = chunk.rows();
+  column.init(value_type(), value_length(), rows);
+  column.set_column_type(Column::Type::NORMAL_COLUMN);
+  for (int row = 0; row < rows; row++) {
+    vector<Value> arguments;
+    arguments.reserve(children_.size());
+    for (unique_ptr<Expression> &child : children_) {
+      Column child_column;
+      RC rc = child->get_column(chunk, child_column);
+      if (OB_FAIL(rc)) {
+        return rc;
+      }
+      arguments.emplace_back(child_column.get_value(row));
+    }
+
+    Value value;
+    RC rc = calc_value(arguments, value);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+    column.append_value(value);
+  }
+  return RC::SUCCESS;
+}
+
+RC FunctionExpr::type_from_string(const char *function_name, Type &type)
+{
+  if (0 == strcasecmp(function_name, "length")) {
+    type = Type::LENGTH;
+  } else if (0 == strcasecmp(function_name, "round")) {
+    type = Type::ROUND;
+  } else if (0 == strcasecmp(function_name, "date_format")) {
+    type = Type::DATE_FORMAT;
+  } else {
+    return RC::INVALID_ARGUMENT;
+  }
+  return RC::SUCCESS;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/log/log.h"
 #include "common/sys/rc.h"
+#include "sql/parser/expression_binder.h"
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 
@@ -91,39 +92,62 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, unordered_map<st
 
   filter_unit = new FilterUnit;
 
-  if (condition.left_is_attr) {
-    Table           *table = nullptr;
-    const FieldMeta *field = nullptr;
-    rc                     = get_table_and_field(db, default_table, tables, condition.left_attr, table, field);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("cannot find attr");
-      return rc;
+  BinderContext binder_context;
+  if (tables != nullptr) {
+    for (auto &table_entry : *tables) {
+      binder_context.add_table(table_entry.second);
     }
-    FilterObj filter_obj;
-    filter_obj.init_attr(Field(table, field));
-    filter_unit->set_left(filter_obj);
-  } else {
-    FilterObj filter_obj;
-    filter_obj.init_value(condition.left_value);
-    filter_unit->set_left(filter_obj);
+  } else if (default_table != nullptr) {
+    binder_context.add_table(default_table);
   }
 
-  if (condition.right_is_attr) {
-    Table           *table = nullptr;
-    const FieldMeta *field = nullptr;
-    rc                     = get_table_and_field(db, default_table, tables, condition.right_attr, table, field);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("cannot find attr");
-      return rc;
-    }
-    FilterObj filter_obj;
-    filter_obj.init_attr(Field(table, field));
-    filter_unit->set_right(filter_obj);
+  ExpressionBinder expression_binder(binder_context);
+  vector<unique_ptr<Expression>> bound_expressions;
+
+  unique_ptr<Expression> left_expr;
+  if (condition.left_expr) {
+    left_expr = condition.left_expr->copy();
+  } else if (condition.left_is_attr) {
+    left_expr = make_unique<UnboundFieldExpr>(condition.left_attr.relation_name, condition.left_attr.attribute_name);
   } else {
-    FilterObj filter_obj;
-    filter_obj.init_value(condition.right_value);
-    filter_unit->set_right(filter_obj);
+    left_expr = make_unique<ValueExpr>(condition.left_value);
   }
+  rc = expression_binder.bind_expression(left_expr, bound_expressions);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to bind left condition expression. rc=%s", strrc(rc));
+    delete filter_unit;
+    filter_unit = nullptr;
+    return rc;
+  }
+  if (bound_expressions.size() != 1) {
+    delete filter_unit;
+    filter_unit = nullptr;
+    return RC::INVALID_ARGUMENT;
+  }
+  filter_unit->set_left(std::move(bound_expressions[0]));
+
+  bound_expressions.clear();
+  unique_ptr<Expression> right_expr;
+  if (condition.right_expr) {
+    right_expr = condition.right_expr->copy();
+  } else if (condition.right_is_attr) {
+    right_expr = make_unique<UnboundFieldExpr>(condition.right_attr.relation_name, condition.right_attr.attribute_name);
+  } else {
+    right_expr = make_unique<ValueExpr>(condition.right_value);
+  }
+  rc = expression_binder.bind_expression(right_expr, bound_expressions);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to bind right condition expression. rc=%s", strrc(rc));
+    delete filter_unit;
+    filter_unit = nullptr;
+    return rc;
+  }
+  if (bound_expressions.size() != 1) {
+    delete filter_unit;
+    filter_unit = nullptr;
+    return RC::INVALID_ARGUMENT;
+  }
+  filter_unit->set_right(std::move(bound_expressions[0]));
 
   filter_unit->set_comp(comp);
 

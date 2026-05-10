@@ -98,6 +98,22 @@ TEST(ParserTest, join_tables_test)
   }
 }
 
+TEST(ParserTest, expression_condition_and_scalar_function_test)
+{
+  ParsedSqlResult result;
+  const char *sql = "select id, length(name), round(score), date_format(u_date, '%d,%M,%Y') "
+                    "from function_table where 5 + score < id + 6";
+  ASSERT_EQ(parse(sql, &result), RC::SUCCESS);
+  ASSERT_EQ(result.sql_nodes().size(), 1);
+
+  ParsedSqlNode *node = result.sql_nodes().front().get();
+  ASSERT_EQ(node->flag, SCF_SELECT);
+  ASSERT_EQ(node->selection.expressions.size(), 4);
+  ASSERT_EQ(node->selection.conditions.size(), 1);
+  ASSERT_NE(node->selection.conditions[0].left_expr, nullptr);
+  ASSERT_NE(node->selection.conditions[0].right_expr, nullptr);
+}
+
 int main(int argc, char **argv)
 {
 

@@ -50,6 +50,30 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   return expr;
 }
 
+Expression *create_function_expression(const char *function_name,
+                                       vector<unique_ptr<Expression>> *children,
+                                       const char *sql_string,
+                                       YYLTYPE *llocp)
+{
+  AggregateExpr::Type aggregate_type;
+  if (children->size() == 1 && AggregateExpr::type_from_string(function_name, aggregate_type) == RC::SUCCESS) {
+    Expression *child = children->front().release();
+    delete children;
+    return create_aggregate_expression(function_name, child, sql_string, llocp);
+  }
+
+  FunctionExpr::Type function_type;
+  if (FunctionExpr::type_from_string(function_name, function_type) != RC::SUCCESS) {
+    delete children;
+    return nullptr;
+  }
+
+  FunctionExpr *expr = new FunctionExpr(function_type, std::move(*children));
+  expr->set_name(token_name(sql_string, llocp));
+  delete children;
+  return expr;
+}
+
 %}
 
 %define api.pure full
@@ -181,7 +205,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <relation_node>       table_references
 %type <relation_node>       joined_table
 %type <expression>          expression
-%type <expression>          aggregate_expression
+%type <expression>          function_expression
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <cstring>             fields_terminated_by
@@ -601,14 +625,22 @@ expression:
       $$->set_name(token_name(sql_string, &@$));
       delete $1;
     }
-    | aggregate_expression {
+    | function_expression {
       $$ = $1;
     }
     ;
 
-aggregate_expression:
+function_expression:
     ID LBRACE expression RBRACE {
-      $$ = create_aggregate_expression($1, $3, sql_string, &@$);
+      vector<unique_ptr<Expression>> *children = new vector<unique_ptr<Expression>>;
+      children->emplace_back($3);
+      $$ = create_function_expression($1, children, sql_string, &@$);
+    }
+    | ID LBRACE expression COMMA expression RBRACE {
+      vector<unique_ptr<Expression>> *children = new vector<unique_ptr<Expression>>;
+      children->emplace_back($3);
+      children->emplace_back($5);
+      $$ = create_function_expression($1, children, sql_string, &@$);
     }
     ;
 
@@ -688,53 +720,12 @@ condition_list:
     }
     ;
 condition:
-    rel_attr comp_op value
+    expression comp_op expression
     {
       $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
+      $$->left_expr.reset($1);
+      $$->right_expr.reset($3);
       $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | value comp_op value 
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | rel_attr comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | value comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
     }
     ;
 
