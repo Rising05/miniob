@@ -62,6 +62,11 @@ RC Stmt::create_stmt(Db *db, ParsedSqlNode &sql_node, Stmt *&stmt)
       return UpdateStmt::create(db, sql_node.update, stmt);
     }
     case SCF_SELECT: {
+      if (sql_node.selection.relations.empty()) {
+        CalcSqlNode calc_sql;
+        calc_sql.expressions = std::move(sql_node.selection.expressions);
+        return CalcStmt::create(calc_sql, stmt);
+      }
       return SelectStmt::create(db, sql_node.selection, stmt);
     }
 

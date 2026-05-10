@@ -34,37 +34,67 @@ int FloatType::compare(const Column &left, const Column &right, int left_idx, in
       (void *)&((float*)right.data())[right_idx]);
 }
 
+static bool is_float_null(float val)
+{
+  return val >= numeric_limits<float>::max() - 1;
+}
+
 RC FloatType::add(const Value &left, const Value &right, Value &result) const
 {
-  result.set_float(left.get_float() + right.get_float());
+  float left_val  = left.get_float();
+  float right_val = right.get_float();
+  if (is_float_null(left_val) || is_float_null(right_val)) {
+    result.set_float(numeric_limits<float>::max());
+  } else {
+    result.set_float(left_val + right_val);
+  }
   return RC::SUCCESS;
 }
 RC FloatType::subtract(const Value &left, const Value &right, Value &result) const
 {
-  result.set_float(left.get_float() - right.get_float());
+  float left_val  = left.get_float();
+  float right_val = right.get_float();
+  if (is_float_null(left_val) || is_float_null(right_val)) {
+    result.set_float(numeric_limits<float>::max());
+  } else {
+    result.set_float(left_val - right_val);
+  }
   return RC::SUCCESS;
 }
 RC FloatType::multiply(const Value &left, const Value &right, Value &result) const
 {
-  result.set_float(left.get_float() * right.get_float());
+  float left_val  = left.get_float();
+  float right_val = right.get_float();
+  if (is_float_null(left_val) || is_float_null(right_val)) {
+    result.set_float(numeric_limits<float>::max());
+  } else {
+    result.set_float(left_val * right_val);
+  }
   return RC::SUCCESS;
 }
 
 RC FloatType::divide(const Value &left, const Value &right, Value &result) const
 {
-  if (right.get_float() > -EPSILON && right.get_float() < EPSILON) {
-    // NOTE:
-    // 设置为浮点数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为浮点数最大值。
+  float left_val  = left.get_float();
+  float right_val = right.get_float();
+  if (is_float_null(left_val) || is_float_null(right_val)) {
+    result.set_float(numeric_limits<float>::max());
+  } else if (right_val > -EPSILON && right_val < EPSILON) {
     result.set_float(numeric_limits<float>::max());
   } else {
-    result.set_float(left.get_float() / right.get_float());
+    result.set_float(left_val / right_val);
   }
   return RC::SUCCESS;
 }
 
 RC FloatType::negative(const Value &val, Value &result) const
 {
-  result.set_float(-val.get_float());
+  float val_val = val.get_float();
+  if (is_float_null(val_val)) {
+    result.set_float(numeric_limits<float>::max());
+  } else {
+    result.set_float(-val_val);
+  }
   return RC::SUCCESS;
 }
 

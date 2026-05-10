@@ -495,8 +495,16 @@ value:
       $$ = new Value((int)$1);
       @$ = @1;
     }
+    | '-' NUMBER {
+      $$ = new Value((int)(-$2));
+      @$ = @1;
+    }
     |FLOAT {
       $$ = new Value((float)$1);
+      @$ = @1;
+    }
+    | '-' FLOAT {
+      $$ = new Value((float)(-$2));
       @$ = @1;
     }
     |SSS {
@@ -563,6 +571,14 @@ select_stmt:        /*  select 语句的语法解析树*/
       if ($6 != nullptr) {
         $$->selection.group_by.swap(*$6);
         delete $6;
+      }
+    }
+    | SELECT expression_list
+    {
+      $$ = new ParsedSqlNode(SCF_SELECT);
+      if ($2 != nullptr) {
+        $$->selection.expressions.swap(*$2);
+        delete $2;
       }
     }
     ;
