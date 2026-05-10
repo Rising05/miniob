@@ -49,6 +49,7 @@ public:
   // TODO: use TableEngine replace Table
   friend class TableEngine;
   friend class HeapTableEngine;
+  friend class UpdatePhysicalOperator;
 
   /**
    * 创建一个表

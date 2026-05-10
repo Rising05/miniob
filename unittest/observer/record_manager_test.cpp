@@ -30,10 +30,47 @@ See the Mulan PSL v2 for more details. */
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 #include "sql/expr/tuple.h"
+#include "sql/operator/update_physical_operator.h"
 #include "gtest/gtest.h"
 
 using namespace std;
 using namespace common;
+
+class SingleRecordPhysicalOperator : public PhysicalOperator
+{
+public:
+  SingleRecordPhysicalOperator(Table *table, const Record &record) : table_(table), record_(record) {}
+
+  PhysicalOperatorType type() const override { return PhysicalOperatorType::TABLE_SCAN; }
+  OpType               get_op_type() const override { return OpType::SEQSCAN; }
+
+  RC open(Trx *) override
+  {
+    returned_ = false;
+    tuple_.set_schema(table_, table_->table_meta().field_metas());
+    tuple_.set_record(&record_);
+    return RC::SUCCESS;
+  }
+
+  RC next() override
+  {
+    if (returned_) {
+      return RC::RECORD_EOF;
+    }
+    returned_ = true;
+    return RC::SUCCESS;
+  }
+
+  RC close() override { return RC::SUCCESS; }
+
+  Tuple *current_tuple() override { return &tuple_; }
+
+private:
+  Table   *table_ = nullptr;
+  Record   record_;
+  RowTuple tuple_;
+  bool     returned_ = false;
+};
 
 TEST(RecordManager, text_field_stores_value_larger_than_page)
 {
@@ -87,6 +124,67 @@ TEST(RecordManager, text_field_stores_value_larger_than_page)
   ASSERT_EQ(AttrType::TEXTS, cell.attr_type());
   ASSERT_EQ(static_cast<int>(large_text.size()), cell.length());
   ASSERT_EQ(large_text, cell.to_string());
+
+  db.reset();
+  filesystem::remove_all(test_directory);
+}
+
+TEST(RecordManager, update_text_field_rewrites_lob_locator)
+{
+  filesystem::path test_directory("record_manager_text_update_test");
+  filesystem::remove_all(test_directory);
+  filesystem::create_directories(test_directory);
+
+  auto db = make_unique<Db>();
+  ASSERT_EQ(RC::SUCCESS, db->init("text_update_db", test_directory.c_str(), "vacuous", "vacuous"));
+
+  vector<AttrInfoSqlNode> attr_infos;
+  AttrInfoSqlNode         id_attr;
+  id_attr.name   = "id";
+  id_attr.type   = AttrType::INTS;
+  id_attr.length = sizeof(int);
+  attr_infos.push_back(id_attr);
+
+  AttrInfoSqlNode text_attr;
+  text_attr.name   = "info";
+  text_attr.type   = AttrType::TEXTS;
+  text_attr.length = 4096;
+  attr_infos.push_back(text_attr);
+
+  ASSERT_EQ(RC::SUCCESS, db->create_table("text_table", attr_infos, {}));
+  Table *table = db->find_table("text_table");
+  ASSERT_NE(nullptr, table);
+
+  Value values[2];
+  values[0].set_int(2);
+  values[1].set_string("this is a very very long string2");
+
+  Record record;
+  ASSERT_EQ(RC::SUCCESS, table->make_record(2, values, record));
+  ASSERT_EQ(RC::SUCCESS, table->insert_record(record));
+  const RID rid = record.rid();
+
+  Record old_record;
+  ASSERT_EQ(RC::SUCCESS, table->get_record(rid, old_record));
+
+  Value update_value("a tmp data");
+  UpdatePhysicalOperator update_operator(table, "info", update_value);
+  update_operator.add_child(make_unique<SingleRecordPhysicalOperator>(table, old_record));
+
+  VacuousTrx trx;
+  ASSERT_EQ(RC::SUCCESS, update_operator.open(&trx));
+
+  Record updated_record;
+  ASSERT_EQ(RC::SUCCESS, table->get_record(rid, updated_record));
+
+  RowTuple tuple;
+  tuple.set_schema(table, table->table_meta().field_metas());
+  tuple.set_record(&updated_record);
+
+  Value cell;
+  ASSERT_EQ(RC::SUCCESS, tuple.cell_at(1, cell));
+  ASSERT_EQ(AttrType::TEXTS, cell.attr_type());
+  ASSERT_EQ("a tmp data", cell.to_string());
 
   db.reset();
   filesystem::remove_all(test_directory);

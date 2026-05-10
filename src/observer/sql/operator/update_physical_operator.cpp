@@ -103,6 +103,14 @@ RC UpdatePhysicalOperator::open(Trx *trx)
           memcpy(new_record_data + offset, value_ptr, copy_len);
         }
       } break;
+      case AttrType::TEXTS: {
+        rc = table_->set_value_to_record(new_record_data, real_value, field_meta);
+        if (OB_FAIL(rc)) {
+          LOG_WARN("failed to update text field. field=%s, rc=%s", attribute_name_.c_str(), strrc(rc));
+          free(new_record_data);
+          return rc;
+        }
+      } break;
       case AttrType::INTS:
       case AttrType::FLOATS:
       case AttrType::BOOLEANS:
