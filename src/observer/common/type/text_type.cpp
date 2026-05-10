@@ -29,7 +29,7 @@ int TextType::compare(const Value &left, const Value &right) const
 
 RC TextType::set_value_from_str(Value &val, const string &data) const
 {
-  val.set_string(data.c_str(), data.length());
+  val.set_text(data.c_str(), data.length());
   return RC::SUCCESS;
 }
 
@@ -42,6 +42,10 @@ RC TextType::cast_to(const Value &val, AttrType type, Value &result) const
       } else {
         result.set_string("", 0);
       }
+      return RC::SUCCESS;
+    }
+    case AttrType::TEXTS: {
+      result.set_text(val.data(), val.length());
       return RC::SUCCESS;
     }
     default:

@@ -35,6 +35,20 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/heap_table_engine.h"
 #include "storage/table/lsm_table_engine.h"
 
+namespace {
+
+bool has_text_field(const TableMeta &table_meta)
+{
+  for (int i = table_meta.sys_field_num(); i < table_meta.field_num(); i++) {
+    if (table_meta.field(i)->type() == AttrType::TEXTS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
 Table::~Table()
 {
   if (lob_handler_ != nullptr) {
@@ -83,6 +97,18 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
   if ((rc = table_meta_.init(table_id, name, trx_fields, attributes, primary_keys, storage_format, storage_engine)) != RC::SUCCESS) {
     LOG_ERROR("Failed to init table meta. name:%s, ret:%d", name, rc);
     return rc;  // delete table file
+  }
+
+  if (has_text_field(table_meta_)) {
+    string lob_file = table_lob_file(base_dir, name);
+    lob_handler_ = new LobFileHandler();
+    rc = lob_handler_->create_file(lob_file.c_str());
+    if (OB_FAIL(rc)) {
+      LOG_ERROR("Failed to create lob file. file name=%s, rc=%s", lob_file.c_str(), strrc(rc));
+      delete lob_handler_;
+      lob_handler_ = nullptr;
+      return rc;
+    }
   }
 
   fstream fs;
@@ -152,6 +178,18 @@ RC Table::open(Db *db, const char *meta_file, const char *base_dir)
   //   return rc;
   // }
   RC rc = RC::SUCCESS;
+
+  if (has_text_field(table_meta_)) {
+    string lob_file = table_lob_file(base_dir, table_meta_.name());
+    lob_handler_ = new LobFileHandler();
+    rc = lob_handler_->open_file(lob_file.c_str());
+    if (OB_FAIL(rc)) {
+      LOG_ERROR("Failed to open lob file. file name=%s, rc=%s", lob_file.c_str(), strrc(rc));
+      delete lob_handler_;
+      lob_handler_ = nullptr;
+      return rc;
+    }
+  }
 
   if (table_meta_.storage_engine() == StorageEngine::HEAP) {
     engine_ = make_unique<HeapTableEngine>(&table_meta_, db_, this);
@@ -253,9 +291,22 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
 RC Table::set_value_to_record(char *record_data, const Value &value, const FieldMeta *field)
 {
+  if (field->type() == AttrType::TEXTS) {
+    if (lob_handler_ == nullptr) {
+      LOG_WARN("text field needs lob handler. table=%s, field=%s", table_meta_.name(), field->name());
+      return RC::INTERNAL;
+    }
+    if (value.length() > TEXT_MAX_LENGTH) {
+      LOG_WARN("text is too long. table=%s, field=%s, length=%d", table_meta_.name(), field->name(), value.length());
+      return RC::INVALID_ARGUMENT;
+    }
+    memset(record_data + field->offset(), 0, field->len());
+    return lob_handler_->write_text_locator(record_data + field->offset(), value.data(), value.length());
+  }
+
   size_t       copy_len = field->len();
   const size_t data_len = value.length();
-  if (field->type() == AttrType::CHARS || field->type() == AttrType::TEXTS) {
+  if (field->type() == AttrType::CHARS) {
     if (copy_len > data_len) {
       copy_len = data_len;
     }

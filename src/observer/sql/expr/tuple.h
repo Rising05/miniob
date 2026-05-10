@@ -197,6 +197,18 @@ public:
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.reset();
     cell.set_type(field_meta->type());
+    if (field_meta->type() == AttrType::TEXTS) {
+      if (table_->lob_handler() == nullptr) {
+        return RC::INTERNAL;
+      }
+      string text_data;
+      RC rc = table_->lob_handler()->read_text_locator(this->record_->data() + field_meta->offset(), text_data);
+      if (OB_FAIL(rc)) {
+        return rc;
+      }
+      cell.set_text(text_data.data(), static_cast<int>(text_data.size()));
+      return RC::SUCCESS;
+    }
     cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     return RC::SUCCESS;
   }

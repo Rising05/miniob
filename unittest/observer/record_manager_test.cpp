@@ -27,10 +27,70 @@ See the Mulan PSL v2 for more details. */
 #include "common/thread/thread_pool_executor.h"
 #include "storage/clog/integrated_log_replayer.h"
 #include "storage/record/heap_record_scanner.h"
+#include "storage/db/db.h"
+#include "storage/table/table.h"
+#include "sql/expr/tuple.h"
 #include "gtest/gtest.h"
 
 using namespace std;
 using namespace common;
+
+TEST(RecordManager, text_field_stores_value_larger_than_page)
+{
+  filesystem::path test_directory("record_manager_text_test");
+  filesystem::remove_all(test_directory);
+  filesystem::create_directories(test_directory);
+
+  auto db = make_unique<Db>();
+  ASSERT_EQ(RC::SUCCESS, db->init("text_db", test_directory.c_str(), "vacuous", "vacuous"));
+
+  vector<AttrInfoSqlNode> attr_infos;
+  AttrInfoSqlNode         id_attr;
+  id_attr.name   = "id";
+  id_attr.type   = AttrType::INTS;
+  id_attr.length = sizeof(int);
+  attr_infos.push_back(id_attr);
+
+  AttrInfoSqlNode text_attr;
+  text_attr.name   = "info";
+  text_attr.type   = AttrType::TEXTS;
+  text_attr.length = 4096;
+  attr_infos.push_back(text_attr);
+
+  ASSERT_EQ(RC::SUCCESS, db->create_table("text_table", attr_infos, {}));
+  Table *table = db->find_table("text_table");
+  ASSERT_NE(nullptr, table);
+
+  string large_text;
+  large_text.reserve(9000);
+  for (int i = 0; i < 9000; i++) {
+    large_text.push_back(static_cast<char>('a' + (i % 26)));
+  }
+
+  Value values[2];
+  values[0].set_int(1);
+  values[1].set_string(large_text.c_str(), static_cast<int>(large_text.size()));
+
+  Record record;
+  ASSERT_EQ(RC::SUCCESS, table->make_record(2, values, record));
+  ASSERT_EQ(RC::SUCCESS, table->insert_record(record));
+
+  Record stored_record;
+  ASSERT_EQ(RC::SUCCESS, table->get_record(record.rid(), stored_record));
+
+  RowTuple tuple;
+  tuple.set_schema(table, table->table_meta().field_metas());
+  tuple.set_record(&stored_record);
+
+  Value cell;
+  ASSERT_EQ(RC::SUCCESS, tuple.cell_at(1, cell));
+  ASSERT_EQ(AttrType::TEXTS, cell.attr_type());
+  ASSERT_EQ(static_cast<int>(large_text.size()), cell.length());
+  ASSERT_EQ(large_text, cell.to_string());
+
+  db.reset();
+  filesystem::remove_all(test_directory);
+}
 
 TEST(RecordPageHandler, test_record_page_handler)
 {

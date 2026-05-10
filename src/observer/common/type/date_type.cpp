@@ -67,7 +67,11 @@ RC DateType::cast_to(const Value &val, AttrType type, Value &result) const
     case AttrType::CHARS:
     case AttrType::TEXTS: {
       const string formatted = format_date_string(val.value_.int_value_);
-      result.set_string(formatted.c_str(), static_cast<int>(formatted.size()));
+      if (type == AttrType::TEXTS) {
+        result.set_text(formatted.c_str(), static_cast<int>(formatted.size()));
+      } else {
+        result.set_string(formatted.c_str(), static_cast<int>(formatted.size()));
+      }
       return RC::SUCCESS;
     }
     default: return RC::SCHEMA_FIELD_TYPE_MISMATCH;

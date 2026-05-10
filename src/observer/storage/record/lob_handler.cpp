@@ -42,3 +42,43 @@ RC LobFileHandler::insert_data(int64_t &offset, int64_t length, const char *data
 
   return rc;
 }
+
+RC LobFileHandler::write_text_locator(char *locator_data, const char *data, int length)
+{
+  if (locator_data == nullptr || length < 0 || length > TEXT_MAX_LENGTH || (length > 0 && data == nullptr)) {
+    return RC::INVALID_ARGUMENT;
+  }
+
+  LobLocator locator;
+  locator.length = length;
+  if (length > 0) {
+    RC rc = insert_data(locator.offset, length, data);
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+  }
+
+  memcpy(locator_data, &locator, sizeof(locator));
+  return RC::SUCCESS;
+}
+
+RC LobFileHandler::read_text_locator(const char *locator_data, string &data)
+{
+  if (locator_data == nullptr) {
+    return RC::INVALID_ARGUMENT;
+  }
+
+  LobLocator locator;
+  memcpy(&locator, locator_data, sizeof(locator));
+  if (locator.length < 0 || locator.length > TEXT_MAX_LENGTH) {
+    return RC::INVALID_ARGUMENT;
+  }
+
+  data.clear();
+  if (locator.length == 0) {
+    return RC::SUCCESS;
+  }
+
+  data.resize(locator.length);
+  return get_data(locator.offset, locator.length, data.data());
+}

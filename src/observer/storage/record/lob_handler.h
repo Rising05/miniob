@@ -10,10 +10,23 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <stdint.h>
+
 #include "common/lang/mutex.h"
 #include "common/lang/sstream.h"
 #include "common/types.h"
 #include "storage/persist/persist.h"
+
+static constexpr int TEXT_MAX_LENGTH = 65535;
+
+struct LobLocator
+{
+  int64_t offset   = 0;
+  int32_t length   = 0;
+  int32_t reserved = 0;
+};
+
+static constexpr int TEXT_LOCATOR_SIZE = sizeof(LobLocator);
 
 /**
  * @brief 管理LOB文件中的 LOB 对象
@@ -35,6 +48,10 @@ public:
   RC insert_data(int64_t &offset, int64_t length, const char *data);
 
   RC get_data(int64_t offset, int64_t length, char *data) { return file_.read_at(offset, length, data); }
+
+  RC write_text_locator(char *locator_data, const char *data, int length);
+
+  RC read_text_locator(const char *locator_data, string &data);
 
 private:
   PersistHandler file_;
